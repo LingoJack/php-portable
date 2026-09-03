@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.15</version>
+    <version>0.2.16</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.16</b>
+        <ul>
+          <li><b>File icon now matches current PhpStorm (New UI)</b>: the blue "php" glyph
+              with an automatic dark-theme variant, taken from the platform's New UI icon
+              set. Replaces the old-UI file-sheet icon from 0.2.15.</li>
+        </ul>
         <b>0.2.15</b>
         <ul>
           <li>The <code>.php</code> file icon is now the official PhpStorm PHP file icon

@@ -10,9 +10,9 @@ import javax.swing.Icon
  */
 object PhpFileType : LanguageFileType(PhpLanguage) {
 
-    // The official PhpStorm PHP file icon (PhpIcons.PhpIcon from the JetBrains PHP plugin,
-    // Apache 2.0 — copyright header preserved in the resource), so .php files look the same
-    // as in PhpStorm.
+    // The New UI PHP file icon (expui/language/php.svg from the platform, with its _dark
+    // variant picked up automatically by IconLoader), so .php files look the same as in
+    // current PhpStorm.
     private val ICON: Icon = IconLoader.getIcon("/icons/php.svg", PhpFileType::class.java.classLoader)
 
     // Anchor PhpLanguage and PhpTokenTypes (and their IElementTypes) to the MAIN plugin
