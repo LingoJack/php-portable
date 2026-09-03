@@ -67,7 +67,8 @@ class PhpDiagnosticsActivity : ProjectActivity {
                         LanguageFindUsages.INSTANCE.allForLanguage(psiFile.language).joinToString { it.javaClass.name }
                 )
                 // Call our evaluator directly: separates "evaluator logic" from "EP consulted".
-                val direct = PhpTargetElementEvaluator().adjustReferenceOrReferencedElement(psiFile, editor, offset, 2, null)
+                val leaf = psiFile.findElementAt(offset)
+                val direct = leaf?.let { PhpTargetElementEvaluator().getNamedElement(it) }
                 log.info(
                     "php-diag: directEvaluatorCall=${direct?.javaClass?.name ?: "NULL"}" +
                         (direct as? com.redhat.devtools.lsp4ij.features.LSPPsiElement)?.let { " range=${it.textRange}" } ?: ""
