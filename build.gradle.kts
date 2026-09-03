@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.genai"
-version = "0.2.8"
+version = "0.2.10"
 
 repositories {
     mavenCentral()

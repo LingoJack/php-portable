@@ -1,14 +1,13 @@
 package io.genai.php.lsp
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.redhat.devtools.lsp4ij.server.ProcessStreamConnectionProvider
 import io.genai.php.sdk.PhpSdkType
 import io.genai.php.settings.PhpInterpreterSettings
 import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * Launches Phpactor as `<portable-php> phpactor.phar language-server`, talking LSP over
@@ -37,35 +36,64 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             setCommands(listOf(php.absolutePath, phar.toString(), "language-server"))
             project.basePath?.let { base ->
                 setWorkingDirectory(base)
+                // Global config FIRST: Phpactor's diagnostics pipeline runs in a base container
+                // that only reads config FILES (never initializationOptions) — without the
+                // global file it resolves classes with a symlink-blind scanner and floods
+                // tabs/tree/editor with false "Class not found" (see PhpactorGlobalConfig).
+                PhpactorGlobalConfig.ensure(INDEX_SCHEMA_VERSION)
                 // Class map for non-Composer projects (see ProjectClassmap): repairs class
-                // resolution in Phpactor's diagnostics pipeline (~0.5s, blocking on purpose —
+                // resolution in Phpactor's session pipeline (~0.5s, blocking on purpose —
                 // the map must be ready before the first handshake).
                 autoloaderPaths = ProjectClassmap.generate(php, base)
+                // Build the STATIC index synchronously (incremental: ~8s cold, ~0s warm),
+                // then give the language-server session its own LIVE copy. This separation is
+                // the core fix for the recurring "Class not found":
+                //  - diagnostics (base container) read the STATIC index, written only here —
+                //    single writer, records always complete;
+                //  - the running session rewrites index records as files are opened/edited
+                //    (verified: it corrupts shared indexes even on graceful shutdown), so it
+                //    must never write the static one.
                 warmUpIndex(php, phar, base)
+                copyStaticIndexToLive(base)
             }
         }
     }
 
     /**
-     * Phpactor's language-server indexer only processes files that change while it runs (file
-     * watcher events + opened documents) — on macOS no watcher is available, so a freshly
-     * created index would stay mostly empty for a long time and half the project's classes
-     * would report "Class not found". The offline `index:build` command does the full scan in
-     * seconds and is incremental, so run it once per server start on a background thread.
+     * Builds the STATIC project index offline before the server starts. Idempotent:
+     * `index:build` is incremental and exits almost immediately on a complete index.
+     * The CLI needs no `--config-extra` — the global config (PhpactorGlobalConfig) carries
+     * the settings.
      */
     private fun warmUpIndex(php: java.io.File, phar: java.nio.file.Path, base: String) {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            runCatching {
-                val cmd = com.intellij.execution.configurations.GeneralCommandLine(
-                    php.absolutePath,
-                    phar.toString(),
-                    "--config-extra=" + indexConfigJson(),
-                    "index:build",
-                ).withWorkDirectory(java.io.File(base))
-                val output = com.intellij.execution.util.ExecUtil.execAndGetOutput(cmd, 120_000)
-                LOG.info("php-portable: index:build finished (${output.exitCode}) ${output.stdoutLines.lastOrNull() ?: ""}")
-            }.onFailure { LOG.warn("php-portable: index:build failed", it) }
-        }
+        runCatching {
+            val cmd = com.intellij.execution.configurations.GeneralCommandLine(
+                php.absolutePath,
+                phar.toString(),
+                "index:build",
+            ).withWorkDirectory(java.io.File(base))
+            val output = com.intellij.execution.util.ExecUtil.execAndGetOutput(cmd, 300_000)
+            LOG.info("php-portable: index:build finished (${output.exitCode}) ${output.stdoutLines.lastOrNull() ?: ""}")
+        }.onFailure { LOG.warn("php-portable: index:build failed", it) }
+    }
+
+    /**
+     * Refreshes the session's LIVE index (`<id>-live-<v>`) from the static build: the session
+     * starts with a complete, consistent index and can then update its own copy freely.
+     */
+    private fun copyStaticIndexToLive(base: String) {
+        runCatching {
+            val cache = Path.of(System.getProperty("user.home"), ".cache", "phpactor", "index")
+            val id = PhpactorManager.projectId(base)
+            val static = cache.resolve("$id-static-$INDEX_SCHEMA_VERSION")
+            val live = cache.resolve("$id-live-$INDEX_SCHEMA_VERSION")
+            if (!Files.isDirectory(static)) return
+            if (Files.exists(live)) {
+                live.toFile().deleteRecursively()
+            }
+            val rc = ProcessBuilder("cp", "-R", static.toString(), live.toString()).start().waitFor()
+            LOG.info("php-portable: live index refreshed (cp rc=$rc)")
+        }.onFailure { LOG.warn("php-portable: live index refresh failed", it) }
     }
 
     /**
@@ -90,9 +118,10 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
      */
     override fun getInitializationOptions(rootUri: VirtualFile?): Any? {
         val options = linkedMapOf<String, Any>()
-        for ((key, value) in INDEXER_OPTIONS) {
-            options["indexer.$key"] = value
-        }
+        // Session-only overrides on top of the global config (PhpactorGlobalConfig): the
+        // session MUST NOT write the static index — it gets its own live copy, refreshed
+        // from the static build at every server start (see copyStaticIndexToLive).
+        options["indexer.index_path"] = "%cache%/index/%project_id%-live-$INDEX_SCHEMA_VERSION"
         val stubs = PhpactorManager.stubsDir()
         if (Files.isDirectory(stubs)) {
             options["worse_reflection.stub_dir"] = stubs.toString()
@@ -107,32 +136,13 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
     companion object {
         private val LOG = Logger.getInstance(PhpactorConnectionProvider::class.java)
 
-        /** Bump when the injected Phpactor config changes in a way that invalidates the index. */
-        const val INDEX_SCHEMA_VERSION = 4
+        /**
+         * Bump when the index layout/injected Phpactor config changes — forces one clean
+         * rebuild of the static index and a fresh live copy.
+         */
+        const val INDEX_SCHEMA_VERSION = 6
 
         /** Above the 1 MB default: keep big generated files (protobuf, config dumps) indexed. */
         const val MAX_FILESIZE_TO_INDEX = 2_000_000
-
-        /** Indexer settings shared by the LSP handshake and the offline warm-up. */
-        val INDEXER_OPTIONS: Map<String, Any> = mapOf(
-            "follow_symlinks" to true,
-            "index_path" to "%cache%/index/%project_id%-$INDEX_SCHEMA_VERSION",
-            "max_filesize_to_index" to MAX_FILESIZE_TO_INDEX,
-        )
-
-        /**
-         * The same options as JSON for Phpactor CLI's `--config-extra`. NOTE: the CLI expects
-         * the SAME FLAT keys as the LSP initializationOptions — a nested `{"indexer":{…}}`
-         * object is silently rejected as unknown keys (verified against 2026.06.25.0).
-         */
-        fun indexConfigJson(): String {
-            return INDEXER_OPTIONS.entries.joinToString(",", "{", "}") { (key, value) ->
-                val encoded = when (value) {
-                    is String -> "\"" + StringUtil.escapeQuotes(value) + "\""
-                    else -> value.toString()
-                }
-                "\"indexer.$key\":$encoded"
-            }
-        }
     }
 }

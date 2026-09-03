@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.8</version>
+    <version>0.2.10</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,28 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.10</b>
+        <ul>
+          <li><b>Fixed: false "Class not found" still marked tabs and the project tree red.</b>
+              Editor and Problems view were clean, but file tabs and the tree kept the red
+              marks — those come from Phpactor's diagnostics pipeline, which runs in a
+              configuration context that never receives the plugin's LSP settings. The plugin
+              now maintains Phpactor's global config file (~/.config/phpactor/phpactor.json)
+              pointing at a STATIC index that only the plugin's offline build writes, while
+              each server session works on its own live copy (a running session rewrites
+              index records and corrupts any index it shares). Diagnostics now resolve
+              project classes correctly at the source: no false findings, no red marks
+              anywhere.</li>
+        </ul>
+        <b>0.2.9</b>
+        <ul>
+          <li><b>Fixed: corrupted index caused recurring "Class not found".</b> The index warm-up
+              ran concurrently with the language server, and Phpactor's on-disk index has no
+              file locking — the two writers overwrote each other's records (classes ended up
+              indexed with an empty file path, which re-broke diagnostics, editor marks and
+              the project tree). The warm-up now completes synchronously before the server
+              process starts, and the index is versioned anew (one clean rebuild).</li>
+        </ul>
         <b>0.2.8</b>
         <ul>
           <li><b>Fixed: false "Class not found" still shown in the editor.</b> LSP4IJ renders
