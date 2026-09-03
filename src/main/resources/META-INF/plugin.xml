@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.5</version>
+    <version>0.2.6</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.6</b>
+        <ul>
+          <li><b>swoole_system / Swoole specialization.</b> The Swoole extension's legacy
+              runtime aliases (<code>swoole_table</code>, <code>swoole_server</code>,
+              <code>Co\*</code>, …) are registered with <code>class_alias()</code> and are
+              invisible to static analysis. The plugin now generates stub declarations for
+              them (one file per namespace, next to the PHP stubs), so go-to-definition,
+              completion and constant resolution work on legacy Swoole code, and the
+              remaining false "Class … not found" diagnostics are filtered client-side for
+              exactly those names.</li>
+        </ul>
         <b>0.2.5</b>
         <ul>
           <li><b>Better protobuf support.</b> Diagnostics are suppressed in generated

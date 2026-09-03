@@ -20,6 +20,10 @@ import io.genai.php.settings.PhpInterpreterSettings
  */
 class PhpClientFeatures : LSPClientFeatures() {
 
+    private companion object {
+        val CLASS_NOT_FOUND = Regex("""Class "([^"]+)" not found""")
+    }
+
     init {
         // Phpactor's document links render as noisy full-line underlines under Cmd+hover in
         // LSP4IJ. They only make include/require paths clickable, which isn't worth the noise —
@@ -34,13 +38,25 @@ class PhpClientFeatures : LSPClientFeatures() {
         setCodeActionFeature(object : LSPCodeActionFeature() {
             override fun isEnabled(file: PsiFile): Boolean = false
         })
-        // Suppress diagnostics (Phpactor's worse.* inspections) in machine-generated files:
-        // protobuf `pb_proto_*.php` output is full of style findings ("missing docblock return
-        // type", …) that nobody can act on. Navigation/completion inside those files keeps
-        // working — only the red/yellow highlighting is turned off.
+        // Diagnostics tuning for machine-generated files and runtime alias classes:
+        //  - protobuf `pb_proto_*.php` output is full of style findings ("missing docblock
+        //    return type", …) nobody can act on — turn the whole file's diagnostics off;
+        //  - Swoole's legacy aliases (swoole_table, Co\*, …) only exist via runtime
+        //    class_alias(); Phpactor's diagnostics pipeline cannot resolve them even with the
+        //    generated stubs (SwooleAliases), so drop exactly those "Class X not found"
+        //    findings. Navigation/completion for them works via the stubs.
         setDiagnosticFeature(object : LSPDiagnosticFeature() {
             override fun isSupported(file: PsiFile): Boolean =
                 !file.name.startsWith("pb_proto_") && super.isSupported(file)
+
+            override fun isInspectionApplicableFor(
+                diagnostic: org.eclipse.lsp4j.Diagnostic,
+                inspection: com.intellij.codeInspection.LocalInspectionTool,
+            ): Boolean {
+                val alias = CLASS_NOT_FOUND.find(diagnostic.message)?.groupValues?.get(1)
+                if (alias != null && alias in SwooleAliases.knownAliases()) return false
+                return super.isInspectionApplicableFor(diagnostic, inspection)
+            }
         })
     }
 

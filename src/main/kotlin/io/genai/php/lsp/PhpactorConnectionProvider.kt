@@ -27,6 +27,9 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             // One-time (~0.7s): unpack phpstorm-stubs to disk so go-to-definition on built-ins
             // opens real files (see getInitializationOptions). No-op once extracted.
             PhpactorManager.ensureStubsExtracted(php)
+            // Also one-time: generate Swoole legacy-alias stubs (swoole_table, Co\*, …) into
+            // the extracted stubs, so swoole_system-style projects can navigate/complete them.
+            SwooleAliases.ensureGenerated(PhpactorManager.stubsDir())
             setCommands(listOf(php.absolutePath, phar.toString(), "language-server"))
             project.basePath?.let { base ->
                 setWorkingDirectory(base)
@@ -94,7 +97,7 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
         private val LOG = Logger.getInstance(PhpactorConnectionProvider::class.java)
 
         /** Bump when the injected Phpactor config changes in a way that invalidates the index. */
-        const val INDEX_SCHEMA_VERSION = 3
+        const val INDEX_SCHEMA_VERSION = 4
 
         /** Above the 1 MB default: keep big generated files (protobuf, config dumps) indexed. */
         const val MAX_FILESIZE_TO_INDEX = 2_000_000
