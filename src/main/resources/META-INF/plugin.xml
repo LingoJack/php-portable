@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.6</version>
+    <version>0.2.7</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,19 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.7</b>
+        <ul>
+          <li><b>Fixed: mass "Class X not found" false positives on non-Composer projects.</b>
+              Phpactor's diagnostics only resolve classes through a Composer autoloader (its
+              fallback scanner follows no symlinks and requires file name == class name). The
+              plugin now generates a Composer-compatible class map at every server start
+              (~0.5s) and feeds it to Phpactor — plus filters the remaining false "not found"
+              findings for classes that verifiably exist in the project. Real Composer
+              projects are untouched.</li>
+          <li><b>Fixed: the index warm-up was a silent no-op</b> — Phpactor's CLI rejects the
+              nested JSON config format; it now sends flat keys, so the offline index build
+              actually runs.</li>
+        </ul>
         <b>0.2.6</b>
         <ul>
           <li><b>swoole_system / Swoole specialization.</b> The Swoole extension's legacy

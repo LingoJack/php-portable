@@ -53,8 +53,15 @@ class PhpClientFeatures : LSPClientFeatures() {
                 diagnostic: org.eclipse.lsp4j.Diagnostic,
                 inspection: com.intellij.codeInspection.LocalInspectionTool,
             ): Boolean {
-                val alias = CLASS_NOT_FOUND.find(diagnostic.message)?.groupValues?.get(1)
-                if (alias != null && alias in SwooleAliases.knownAliases()) return false
+                val cls = CLASS_NOT_FOUND.find(diagnostic.message)?.groupValues?.get(1)
+                if (cls != null &&
+                    (cls in SwooleAliases.knownAliases() || cls in ProjectClassmap.knownClasses())
+                ) {
+                    // The class is declared in the project (or a Swoole runtime alias) — the
+                    // "not found" is a known false positive of Phpactor's diagnostics pipeline
+                    // on non-Composer layouts; navigation/completion resolve it fine.
+                    return false
+                }
                 return super.isInspectionApplicableFor(diagnostic, inspection)
             }
         })

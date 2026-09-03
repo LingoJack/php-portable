@@ -19,6 +19,10 @@ import java.nio.file.Files
  * start; [PhpClientFeatures.isEnabled] gates this up front so we don't get here in that case.
  */
 class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProvider() {
+
+    /** Autoloader paths injected via `composer.autoloader_path` (set in init). */
+    private var autoloaderPaths: List<String>? = null
+
     init {
         val php = PhpInterpreterSettings.getInstance().defaultSdk()?.homePath
             ?.let { PhpSdkType.findPhpExecutable(it) }
@@ -33,6 +37,10 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             setCommands(listOf(php.absolutePath, phar.toString(), "language-server"))
             project.basePath?.let { base ->
                 setWorkingDirectory(base)
+                // Class map for non-Composer projects (see ProjectClassmap): repairs class
+                // resolution in Phpactor's diagnostics pipeline (~0.5s, blocking on purpose —
+                // the map must be ready before the first handshake).
+                autoloaderPaths = ProjectClassmap.generate(php, base)
                 warmUpIndex(php, phar, base)
             }
         }
@@ -90,6 +98,9 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             options["worse_reflection.stub_dir"] = stubs.toString()
             options["indexer.stub_paths"] = listOf(stubs.toString())
         }
+        // Class map (see ProjectClassmap): read by Phpactor in class-maps-only mode, no
+        // project code is executed.
+        autoloaderPaths?.let { options["composer.autoloader_path"] = it }
         return options
     }
 
@@ -109,16 +120,19 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             "max_filesize_to_index" to MAX_FILESIZE_TO_INDEX,
         )
 
-        /** The same options as JSON for Phpactor CLI's `--config-extra`. */
+        /**
+         * The same options as JSON for Phpactor CLI's `--config-extra`. NOTE: the CLI expects
+         * the SAME FLAT keys as the LSP initializationOptions — a nested `{"indexer":{…}}`
+         * object is silently rejected as unknown keys (verified against 2026.06.25.0).
+         */
         fun indexConfigJson(): String {
-            val inner = INDEXER_OPTIONS.entries.joinToString(",") { (key, value) ->
+            return INDEXER_OPTIONS.entries.joinToString(",", "{", "}") { (key, value) ->
                 val encoded = when (value) {
                     is String -> "\"" + StringUtil.escapeQuotes(value) + "\""
                     else -> value.toString()
                 }
-                "\"$key\":$encoded"
+                "\"indexer.$key\":$encoded"
             }
-            return "{\"indexer\":{$inner}}"
         }
     }
 }
