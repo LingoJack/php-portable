@@ -34,13 +34,34 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
      * replacing the default `phar://…` path. Phpactor merges initializationOptions into its
      * config, so go-to-definition on built-ins (\DateTime, json_encode, …) resolves to real,
      * openable files instead of a sealed phar path.
+     *
+     * The indexer options are load-bearing for real-world projects: Phpactor's file scanner
+     * does NOT follow symlinks by default, so a workspace whose root is a container of
+     * symlinked checkouts (very common) indexes ZERO project files — member completion
+     * returns nothing and every cross-file class shows as "Class not found". Turning
+     * `indexer.follow_symlinks` on fixes both.
+     *
+     * The on-disk index is keyed by project root only (`~/.cache/phpactor/index/<root>-<hash>`),
+     * so an index poisoned by a previous run (built without the options above) would be reused
+     * forever — `isFresh` skips every unchanged file and the missing class records never come
+     * back. Versioning the path forces one clean rebuild whenever [INDEX_SCHEMA_VERSION] is
+     * bumped; `%cache%` / `%project_id%` are expanded by Phpactor's path resolver.
      */
     override fun getInitializationOptions(rootUri: VirtualFile?): Any? {
-        val stubs = PhpactorManager.stubsDir()
-        if (!Files.isDirectory(stubs)) return null
-        return mapOf(
-            "worse_reflection.stub_dir" to stubs.toString(),
-            "indexer.stub_paths" to listOf(stubs.toString()),
+        val options = linkedMapOf<String, Any>(
+            "indexer.follow_symlinks" to true,
+            "indexer.index_path" to "%cache%/index/%project_id%-$INDEX_SCHEMA_VERSION",
         )
+        val stubs = PhpactorManager.stubsDir()
+        if (Files.isDirectory(stubs)) {
+            options["worse_reflection.stub_dir"] = stubs.toString()
+            options["indexer.stub_paths"] = listOf(stubs.toString())
+        }
+        return options
+    }
+
+    companion object {
+        /** Bump when the injected Phpactor config changes in a way that invalidates the index. */
+        const val INDEX_SCHEMA_VERSION = 2
     }
 }

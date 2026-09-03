@@ -11,6 +11,18 @@ import javax.swing.Icon
 object PhpFileType : LanguageFileType(PhpLanguage) {
     private val ICON: Icon = IconLoader.getIcon("/icons/php.svg", PhpFileType::class.java.classLoader)
 
+    // Anchor PhpLanguage and PhpTokenTypes (and their IElementTypes) to the MAIN plugin
+    // descriptor. FileTypeManager instantiates this class at startup, long before any dynamic
+    // plugin churn. Without the anchor, the first class-init of PhpTokenTypes can happen inside
+    // an lsp.xml extension notification (e.g. while LSP4IJ is being dynamically loaded or
+    // unloaded); the platform then attributes our language and element types to that
+    // sub-descriptor, so toggling LSP4IJ tombstones them and every .php editor throws
+    // "Trying to access element type from unloaded plugin: tombstone of PHP_…" (SEVERE in
+    // idea.log, highlighting dies until restart). Touching a PhpTokenTypes member here forces
+    // the <clinit> while the main descriptor owns the class.
+    @Suppress("unused")
+    private val TOKEN_TYPES_ANCHOR: Set<String> = PhpTokenTypes.KEYWORDS
+
     override fun getName(): String = "PHP File"
     override fun getDescription(): String = "PHP source file"
     override fun getDefaultExtension(): String = "php"

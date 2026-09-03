@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.2</version>
+    <version>0.2.3</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,18 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.3</b>
+        <ul>
+          <li><b>Fixed: no completion / wrong "Class not found" errors in symlink-based
+              workspaces.</b> Projects whose root is a container of symlinked checkouts (common
+              with monorepo-style setups) now index correctly — Phpactor's indexer follows
+              symlinks, and the on-disk index is versioned so the broken one is rebuilt once
+              automatically.</li>
+          <li><b>Fixed: editor errors after toggling the LSP4IJ plugin.</b> The PHP language and
+              its token types are now attached to this plugin's main descriptor, so disabling or
+              reloading LSP4IJ no longer breaks highlighting with
+              "Trying to access element type from unloaded plugin" errors.</li>
+        </ul>
         <b>0.2.2</b>
         <ul>
           <li>Added a plugin icon (shown in the Plugins list and on the Marketplace).</li>
