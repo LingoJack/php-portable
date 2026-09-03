@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.10</version>
+    <version>0.2.11</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,19 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.11</b>
+        <ul>
+          <li><b>Fixed: diagnostics pipeline crashed with LSP4IJ 0.21.0</b> — it bundles
+              lsp4j 1.0.0, where <code>Diagnostic.getMessage()</code> returns
+              <code>Either&lt;String, MarkupContent&gt;</code> instead of <code>String</code>.
+              The plugin's filter (compiled against the older signature) threw
+              <code>NoSuchMethodError</code>, killing LSP4IJ's whole diagnostics pipeline —
+              stale editor marks, tab underlines and project-tree error badges could never be
+              cleared. Message access is now version-proof (reflective) and any failure
+              degrades to "no filtering" instead of breaking the pipeline.</li>
+          <li><b>PHP file icon</b> is now the classic PHP logo (ellipse + php) instead of the
+              custom monospace mark.</li>
+        </ul>
         <b>0.2.10</b>
         <ul>
           <li><b>Fixed: false "Class not found" still marked tabs and the project tree red.</b>

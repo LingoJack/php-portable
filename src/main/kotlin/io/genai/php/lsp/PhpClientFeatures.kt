@@ -75,11 +75,29 @@ class PhpClientFeatures : LSPClientFeatures() {
 
     /** True for false-positive `Class "X" not found` findings on known-declared classes. */
     private fun isSuppressedClassNotFound(diagnostic: org.eclipse.lsp4j.Diagnostic): Boolean {
-        val cls = CLASS_NOT_FOUND.find(diagnostic.message)?.groupValues?.get(1) ?: return false
+        val cls = CLASS_NOT_FOUND.find(diagnosticMessageOf(diagnostic) ?: return false)?.groupValues?.get(1) ?: return false
         // The class is declared in the project (per the generated class map) or is a Swoole
         // runtime alias — navigation/completion resolve it fine; the "not found" is a known
         // false positive of Phpactor's diagnostics pipeline on non-Composer layouts.
         return cls in SwooleAliases.knownAliases() || cls in ProjectClassmap.knownClasses()
+    }
+
+    /**
+     * Reads a diagnostic's message across lsp4j versions. MUST be reflective: lsp4j 1.0.0
+     * (bundled with LSP4IJ 0.21.0+) changed `Diagnostic.getMessage()` from returning `String`
+     * to returning `Either<String, MarkupContent>` — a direct call compiled against the older
+     * signature throws NoSuchMethodError at runtime, which crashes LSP4IJ's whole diagnostics
+     * pipeline (no highlights applied, stale tab/project-tree error marks never cleared).
+     * Any failure degrades to "no filtering" instead of breaking the pipeline.
+     */
+    private fun diagnosticMessageOf(diagnostic: org.eclipse.lsp4j.Diagnostic): String? {
+        return runCatching {
+            val raw = diagnostic.javaClass.getMethod("getMessage").invoke(diagnostic) ?: return null
+            when (raw) {
+                is String -> raw
+                else -> raw.javaClass.getMethod("getLeft").invoke(raw) as? String
+            }
+        }.getOrNull()
     }
 
     override fun isEnabled(file: VirtualFile): Boolean {
