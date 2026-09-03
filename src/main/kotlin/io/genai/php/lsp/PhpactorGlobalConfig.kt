@@ -33,12 +33,18 @@ object PhpactorGlobalConfig {
         Path.of(System.getProperty("user.home"), ".config", "phpactor", "phpactor.json")
 
     /**
-     * Codes of style diagnostics that are pure noise on legacy (non-Composer, swoole_system)
-     * codebases: docblock/return-type nagging and undefined-variable warnings on the
-     * auto-vivification idiom. Removed from this list, a code can be re-enabled by the user
-     * by setting `language_server.diagnostic_ignore_codes` themselves (user value wins).
+     * Codes of diagnostics that are pure noise on legacy (non-Composer, swoole_system)
+     * codebases: docblock/return-type nagging, undefined-variable warnings on the
+     * auto-vivification idiom, and member-not-found — overwhelmingly false positives there
+     * (protobuf `__call` accessors, env-variant config classes, dynamic mixins) AND the only
+     * remaining ERROR-severity source, which is what paints tabs and the project tree red
+     * via the raw-diagnostics Wolf marks. Removed from this list, a code can be re-enabled by
+     * the user by setting `language_server.diagnostic_ignore_codes` themselves (user value
+     * wins). Note the protobuf/variant class suppression in PhpClientFilters still narrows
+     * member findings if worse.missing_member is re-enabled.
      */
     private val DEFAULT_IGNORED_DIAGNOSTIC_CODES = listOf(
+        "worse.missing_member",
         "worse.docblock_missing_param",
         "worse.docblock_missing_return_type",
         "worse.missing_return_type",

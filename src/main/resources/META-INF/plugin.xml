@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.12</version>
+    <version>0.2.13</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,18 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.13</b>
+        <ul>
+          <li><b>Fixed: remaining red tabs/project-tree marks on files using protobuf
+              accessors or env-variant config classes.</b> Those marks come from RAW
+              ERROR-severity diagnostics (Wolf marks), which client-side filtering cannot
+              touch. <code>worse.missing_member</code> — the provider behind both the
+              protobuf <code>__call</code> accessor and the variant-class constant false
+              positives — is now disabled by default at the source. All remaining
+              ERROR-severity diagnostics are gone, so no file gets marked. Set
+              <code>language_server.diagnostic_ignore_codes</code> yourself to re-enable
+              (the plugin's protobuf/variant class filtering then still narrows the noise).</li>
+        </ul>
         <b>0.2.12</b>
         <ul>
           <li><b>No more protobuf false positives and style noise on legacy codebases.</b>
