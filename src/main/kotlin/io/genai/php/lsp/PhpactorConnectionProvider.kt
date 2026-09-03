@@ -33,6 +33,10 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             // Also one-time: generate Swoole legacy-alias stubs (swoole_table, Co\*, …) into
             // the extracted stubs, so swoole_system-style projects can navigate/complete them.
             SwooleAliases.ensureGenerated(PhpactorManager.stubsDir())
+            // Install the \ProtobufMessage base-class stub (declared API of the runtime
+            // protobuf base that legacy message classes extend — without it every inherited
+            // method is a false "does not exist"). No-op when already current.
+            ensureProtobufMessageStub()
             setCommands(listOf(php.absolutePath, phar.toString(), "language-server"))
             project.basePath?.let { base ->
                 setWorkingDirectory(base)
@@ -57,6 +61,31 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
                 copyStaticIndexToLive(base)
             }
         }
+    }
+
+    /**
+     * Copies the bundled `\ProtobufMessage` stub into the extracted stubs dir. The stub
+     * changes rarely; when it does, the WorseReflection stub-map caches must be dropped so
+     * they rebuild (same mechanism as SwooleAliases).
+     */
+    private fun ensureProtobufMessageStub() {
+        runCatching {
+            val target = PhpactorManager.stubsDir().resolve("protobuf_message.php")
+            val stub = javaClass.getResourceAsStream("/php/protobuf_message_stub.php")?.use {
+                it.readBytes().decodeToString()
+            } ?: return
+            if (Files.isRegularFile(target) && Files.readString(target) == stub) return
+            Files.writeString(target, stub)
+            // Invalidate the WorseReflection stub maps so the new file is picked up.
+            val mapDir = Path.of(System.getProperty("user.home"), ".cache", "phpactor", "worse-reflection")
+            if (Files.isDirectory(mapDir)) {
+                Files.list(mapDir).use { stream ->
+                    stream.filter { it.fileName.toString().endsWith(".map") }
+                        .forEach { Files.deleteIfExists(it) }
+                }
+            }
+            LOG.info("php-portable: ProtobufMessage stub installed")
+        }.onFailure { LOG.warn("php-portable: ProtobufMessage stub install failed", it) }
     }
 
     /**

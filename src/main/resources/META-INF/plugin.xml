@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.11</version>
+    <version>0.2.12</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,29 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.12</b>
+        <ul>
+          <li><b>No more protobuf false positives and style noise on legacy codebases.</b>
+              <ul>
+                <li>A stub for the runtime-provided <code>\ProtobufMessage</code> base class is
+                    installed with the PHP stubs, so inherited methods
+                    (<code>parseFromString</code>, <code>serializeToString</code>, …) resolve
+                    instead of being reported as missing.</li>
+                <li>Generated protobuf message accessors (<code>getIdKeys</code>, …) are
+                    provided by the runtime's <code>__call</code> magic — the remaining
+                    "Method … does not exist" findings on <code>extends \ProtobufMessage</code>
+                    classes are now suppressed (the class list ships with the generated class
+                    map).</li>
+                <li>Style diagnostics that are pure noise on legacy code —
+                    <code>worse.docblock_missing_param</code>,
+                    <code>worse.docblock_missing_return_type</code>,
+                    <code>worse.missing_return_type</code>,
+                    <code>worse.undefined_variable</code> — are disabled by default via the
+                    maintained Phpactor config. Set
+                    <code>language_server.diagnostic_ignore_codes</code> yourself to
+                    override.</li>
+              </ul></li>
+        </ul>
         <b>0.2.11</b>
         <ul>
           <li><b>Fixed: diagnostics pipeline crashed with LSP4IJ 0.21.0</b> — it bundles

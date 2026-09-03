@@ -33,8 +33,23 @@ object PhpactorGlobalConfig {
         Path.of(System.getProperty("user.home"), ".config", "phpactor", "phpactor.json")
 
     /**
-     * Ensures the global config contains our indexer settings, preserving any other keys the
-     * user may have set. Rewrites only when something actually changed.
+     * Codes of style diagnostics that are pure noise on legacy (non-Composer, swoole_system)
+     * codebases: docblock/return-type nagging and undefined-variable warnings on the
+     * auto-vivification idiom. Removed from this list, a code can be re-enabled by the user
+     * by setting `language_server.diagnostic_ignore_codes` themselves (user value wins).
+     */
+    private val DEFAULT_IGNORED_DIAGNOSTIC_CODES = listOf(
+        "worse.docblock_missing_param",
+        "worse.docblock_missing_return_type",
+        "worse.missing_return_type",
+        "worse.undefined_variable",
+    )
+
+    /**
+     * Ensures the global config contains our indexer settings and default diagnostic-ignore
+     * list, preserving any other keys the user may have set. Rewrites only when something
+     * actually changed. A user-provided `language_server.diagnostic_ignore_codes` is never
+     * overwritten.
      */
     fun ensure(indexSchemaVersion: Int) {
         runCatching {
@@ -48,10 +63,24 @@ object PhpactorGlobalConfig {
                 addProperty("indexer.follow_symlinks", true)
                 addProperty("indexer.index_path", "%cache%/index/%project_id%-static-v$indexSchemaVersion")
                 addProperty("indexer.max_filesize_to_index", PhpactorConnectionProvider.MAX_FILESIZE_TO_INDEX)
+                add("language_server.diagnostic_ignore_codes", com.google.gson.JsonArray().apply {
+                    DEFAULT_IGNORED_DIAGNOSTIC_CODES.forEach { add(it) }
+                })
+            }
+            // The extracted stubs (with the generated Swoole aliases and the ProtobufMessage
+            // stub) must also be visible to the base-container diagnostics pipeline, which
+            // never sees the LSP initializationOptions — point its stub dir at our copy.
+            val stubs = PhpactorManager.stubsDir()
+            if (Files.isDirectory(stubs)) {
+                wanted.addProperty("worse_reflection.stub_dir", stubs.toString())
             }
 
             var changed = false
             for ((key, value) in wanted.entrySet()) {
+                // User-set ignore codes always win; everything else is kept in sync.
+                if (key == "language_server.diagnostic_ignore_codes" && existing.has(key)) {
+                    continue
+                }
                 if (existing.get(key) != value) {
                     existing.add(key, value)
                     changed = true

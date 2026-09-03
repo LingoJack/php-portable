@@ -22,6 +22,8 @@ class PhpClientFeatures : LSPClientFeatures() {
 
     private companion object {
         val CLASS_NOT_FOUND = Regex("""Class "([^"]+)" not found""")
+        val METHOD_NOT_EXIST = Regex("""Method "[^"]+" does not exist on class "([^"]+)"""")
+        val CONSTANT_NOT_EXIST = Regex("""Constant "[^"]+" does not exist on class "([^"]+)"""")
     }
 
     init {
@@ -73,13 +75,29 @@ class PhpClientFeatures : LSPClientFeatures() {
         })
     }
 
-    /** True for false-positive `Class "X" not found` findings on known-declared classes. */
+    /** True for known false positives: `Class "X" not found` and protobuf `Method … does not exist`. */
     private fun isSuppressedClassNotFound(diagnostic: org.eclipse.lsp4j.Diagnostic): Boolean {
-        val cls = CLASS_NOT_FOUND.find(diagnosticMessageOf(diagnostic) ?: return false)?.groupValues?.get(1) ?: return false
-        // The class is declared in the project (per the generated class map) or is a Swoole
-        // runtime alias — navigation/completion resolve it fine; the "not found" is a known
-        // false positive of Phpactor's diagnostics pipeline on non-Composer layouts.
-        return cls in SwooleAliases.knownAliases() || cls in ProjectClassmap.knownClasses()
+        val message = diagnosticMessageOf(diagnostic) ?: return false
+        val cls = CLASS_NOT_FOUND.find(message)?.groupValues?.get(1)
+        if (cls != null) {
+            // The class is declared in the project (per the generated class map) or is a Swoole
+            // runtime alias — navigation/completion resolve it fine; the "not found" is a known
+            // false positive of Phpactor's diagnostics pipeline on non-Composer layouts.
+            return cls in SwooleAliases.knownAliases() || cls in ProjectClassmap.knownClasses()
+        }
+        // Messages extending \ProtobufMessage get their accessors (get*/set*/append*/clear*)
+        // via the runtime's __call magic — static analysis cannot see them and reports every
+        // generated accessor as missing. Suppress those; the ProtobufMessage stub covers the
+        // declared base API (parseFromString, serializeToString, reset).
+        val container = METHOD_NOT_EXIST.find(message)?.groupValues?.get(1)
+        if (container != null) {
+            return container in ProjectClassmap.protobufClasses() ||
+                container in ProjectClassmap.variantClasses()
+        }
+        // Env-variant config classes are declared once per environment directory; reflection
+        // sees only one arbitrary variant, so members of the others look missing.
+        val constContainer = CONSTANT_NOT_EXIST.find(message)?.groupValues?.get(1) ?: return false
+        return constContainer in ProjectClassmap.variantClasses()
     }
 
     /**

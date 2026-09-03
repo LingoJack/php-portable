@@ -65,8 +65,10 @@ object ProjectClassmap {
                 LOG.warn("php-portable: class map generation failed: ${output.stderr.take(300)}")
                 return null
             }
-            cachedClasses = null // refresh on next knownClasses() read
             LOG.info("php-portable: class map generated: ${output.stdoutLines.lastOrNull() ?: ""}")
+            cachedClasses = null // refresh on next knownClasses() read
+            cachedProtobufClasses = null
+            cachedVariantClasses = null
             buildList {
                 add(out.resolve("autoload.php").toString())
                 val vendor = Path.of(projectRoot, "vendor", "autoload.php")
@@ -92,13 +94,49 @@ object ProjectClassmap {
      */
     fun knownClasses(): Set<String> {
         cachedClasses?.let { return it }
-        val names = runCatching {
+        val names = readGeneratedList("classes.txt")
+        cachedClasses = names
+        return names
+    }
+
+    @Volatile
+    private var cachedProtobufClasses: Set<String>? = null
+
+    /**
+     * FQNs of classes declared as `extends \ProtobufMessage` (the runtime-provided protobuf
+     * base whose generated accessors are __call magic — invisible to static analysis).
+     * Used to suppress false `Method "X" does not exist` findings on those classes.
+     */
+    fun protobufClasses(): Set<String> {
+        cachedProtobufClasses?.let { return it }
+        val names = readGeneratedList("protobuf-classes.txt")
+        cachedProtobufClasses = names
+        return names
+    }
+
+    @Volatile
+    private var cachedVariantClasses: Set<String>? = null
+
+    /**
+     * FQNs declared in more than one file — env-variant config classes in this framework
+     * (the autoloader loads one variant per environment). Any single-file reflection picks
+     * one arbitrary variant, so member findings on them are unreliable.
+     */
+    fun variantClasses(): Set<String> {
+        cachedVariantClasses?.let { return it }
+        val names = readGeneratedList("variant-classes.txt")
+        cachedVariantClasses = names
+        return names
+    }
+
+    private fun readGeneratedList(fileName: String): Set<String> {
+        return runCatching {
             val root = Path.of(System.getProperty("user.home"), ".php-portable", "classmaps")
             if (!Files.isDirectory(root)) return@runCatching emptySet()
             val result = mutableSetOf<String>()
             Files.list(root).use { dirs ->
                 dirs.filter { Files.isDirectory(it) }.forEach { dir ->
-                    val file = dir.resolve("classes.txt")
+                    val file = dir.resolve(fileName)
                     if (Files.isRegularFile(file)) {
                         Files.readAllLines(file).forEach { if (it.isNotBlank()) result.add(it.trim()) }
                     }
@@ -106,7 +144,5 @@ object ProjectClassmap {
             }
             result
         }.getOrDefault(emptySet())
-        cachedClasses = names
-        return names
     }
 }
