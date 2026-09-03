@@ -1,15 +1,19 @@
 package io.genai.php.lang
 
 import com.intellij.openapi.fileTypes.LanguageFileType
+import com.intellij.openapi.util.IconLoader
 import javax.swing.Icon
 
 /**
  * `.php` file type. Referenced by plugin.xml via fieldName="INSTANCE" — a Kotlin
  * `object` already exposes a static `INSTANCE` field, so no extra declaration needed.
- *
- * No custom icon on purpose: returning null renders with the IDE's default file icon.
  */
 object PhpFileType : LanguageFileType(PhpLanguage) {
+
+    // The official PhpStorm PHP file icon (PhpIcons.PhpIcon from the JetBrains PHP plugin,
+    // Apache 2.0 — copyright header preserved in the resource), so .php files look the same
+    // as in PhpStorm.
+    private val ICON: Icon = IconLoader.getIcon("/icons/php.svg", PhpFileType::class.java.classLoader)
 
     // Anchor PhpLanguage and PhpTokenTypes (and their IElementTypes) to the MAIN plugin
     // descriptor. FileTypeManager instantiates this class at startup, long before any dynamic
@@ -26,5 +30,5 @@ object PhpFileType : LanguageFileType(PhpLanguage) {
     override fun getName(): String = "PHP File"
     override fun getDescription(): String = "PHP source file"
     override fun getDefaultExtension(): String = "php"
-    override fun getIcon(): Icon? = null
+    override fun getIcon(): Icon? = ICON
 }

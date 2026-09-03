@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.14</version>
+    <version>0.2.15</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.15</b>
+        <ul>
+          <li>The <code>.php</code> file icon is now the official PhpStorm PHP file icon
+              (from the JetBrains PHP plugin, Apache 2.0, copyright header preserved), so
+              files look exactly like they do in PhpStorm.</li>
+        </ul>
         <b>0.2.14</b>
         <ul>
           <li>The <code>.php</code> file type no longer sets a custom icon — files render with
