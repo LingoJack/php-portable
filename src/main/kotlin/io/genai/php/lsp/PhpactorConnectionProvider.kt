@@ -1,6 +1,9 @@
 package io.genai.php.lsp
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.redhat.devtools.lsp4ij.server.ProcessStreamConnectionProvider
 import io.genai.php.sdk.PhpSdkType
@@ -25,7 +28,32 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
             // opens real files (see getInitializationOptions). No-op once extracted.
             PhpactorManager.ensureStubsExtracted(php)
             setCommands(listOf(php.absolutePath, phar.toString(), "language-server"))
-            project.basePath?.let { setWorkingDirectory(it) }
+            project.basePath?.let { base ->
+                setWorkingDirectory(base)
+                warmUpIndex(php, phar, base)
+            }
+        }
+    }
+
+    /**
+     * Phpactor's language-server indexer only processes files that change while it runs (file
+     * watcher events + opened documents) — on macOS no watcher is available, so a freshly
+     * created index would stay mostly empty for a long time and half the project's classes
+     * would report "Class not found". The offline `index:build` command does the full scan in
+     * seconds and is incremental, so run it once per server start on a background thread.
+     */
+    private fun warmUpIndex(php: java.io.File, phar: java.nio.file.Path, base: String) {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            runCatching {
+                val cmd = com.intellij.execution.configurations.GeneralCommandLine(
+                    php.absolutePath,
+                    phar.toString(),
+                    "--config-extra=" + indexConfigJson(),
+                    "index:build",
+                ).withWorkDirectory(java.io.File(base))
+                val output = com.intellij.execution.util.ExecUtil.execAndGetOutput(cmd, 120_000)
+                LOG.info("php-portable: index:build finished (${output.exitCode}) ${output.stdoutLines.lastOrNull() ?: ""}")
+            }.onFailure { LOG.warn("php-portable: index:build failed", it) }
         }
     }
 
@@ -39,7 +67,9 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
      * does NOT follow symlinks by default, so a workspace whose root is a container of
      * symlinked checkouts (very common) indexes ZERO project files — member completion
      * returns nothing and every cross-file class shows as "Class not found". Turning
-     * `indexer.follow_symlinks` on fixes both.
+     * `indexer.follow_symlinks` on fixes both. `max_filesize_to_index` is raised above the
+     * 1 MB default so large generated files (protobuf `pb_proto_*.php` in this stack can be
+     * big) are indexed too.
      *
      * The on-disk index is keyed by project root only (`~/.cache/phpactor/index/<root>-<hash>`),
      * so an index poisoned by a previous run (built without the options above) would be reused
@@ -48,10 +78,10 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
      * bumped; `%cache%` / `%project_id%` are expanded by Phpactor's path resolver.
      */
     override fun getInitializationOptions(rootUri: VirtualFile?): Any? {
-        val options = linkedMapOf<String, Any>(
-            "indexer.follow_symlinks" to true,
-            "indexer.index_path" to "%cache%/index/%project_id%-$INDEX_SCHEMA_VERSION",
-        )
+        val options = linkedMapOf<String, Any>()
+        for ((key, value) in INDEXER_OPTIONS) {
+            options["indexer.$key"] = value
+        }
         val stubs = PhpactorManager.stubsDir()
         if (Files.isDirectory(stubs)) {
             options["worse_reflection.stub_dir"] = stubs.toString()
@@ -61,7 +91,31 @@ class PhpactorConnectionProvider(project: Project) : ProcessStreamConnectionProv
     }
 
     companion object {
+        private val LOG = Logger.getInstance(PhpactorConnectionProvider::class.java)
+
         /** Bump when the injected Phpactor config changes in a way that invalidates the index. */
-        const val INDEX_SCHEMA_VERSION = 2
+        const val INDEX_SCHEMA_VERSION = 3
+
+        /** Above the 1 MB default: keep big generated files (protobuf, config dumps) indexed. */
+        const val MAX_FILESIZE_TO_INDEX = 2_000_000
+
+        /** Indexer settings shared by the LSP handshake and the offline warm-up. */
+        val INDEXER_OPTIONS: Map<String, Any> = mapOf(
+            "follow_symlinks" to true,
+            "index_path" to "%cache%/index/%project_id%-$INDEX_SCHEMA_VERSION",
+            "max_filesize_to_index" to MAX_FILESIZE_TO_INDEX,
+        )
+
+        /** The same options as JSON for Phpactor CLI's `--config-extra`. */
+        fun indexConfigJson(): String {
+            val inner = INDEXER_OPTIONS.entries.joinToString(",") { (key, value) ->
+                val encoded = when (value) {
+                    is String -> "\"" + StringUtil.escapeQuotes(value) + "\""
+                    else -> value.toString()
+                }
+                "\"$key\":$encoded"
+            }
+            return "{\"indexer\":{$inner}}"
+        }
     }
 }

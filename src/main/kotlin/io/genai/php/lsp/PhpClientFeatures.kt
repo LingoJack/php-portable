@@ -4,6 +4,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import com.redhat.devtools.lsp4ij.client.features.LSPClientFeatures
 import com.redhat.devtools.lsp4ij.client.features.LSPCodeActionFeature
+import com.redhat.devtools.lsp4ij.client.features.LSPDiagnosticFeature
 import com.redhat.devtools.lsp4ij.client.features.LSPDocumentLinkFeature
 import io.genai.php.sdk.PhpSdkType
 import io.genai.php.settings.PhpInterpreterSettings
@@ -32,6 +33,14 @@ class PhpClientFeatures : LSPClientFeatures() {
         // are the least-essential feature here; dropping them keeps completion/nav/hover stable.
         setCodeActionFeature(object : LSPCodeActionFeature() {
             override fun isEnabled(file: PsiFile): Boolean = false
+        })
+        // Suppress diagnostics (Phpactor's worse.* inspections) in machine-generated files:
+        // protobuf `pb_proto_*.php` output is full of style findings ("missing docblock return
+        // type", …) that nobody can act on. Navigation/completion inside those files keeps
+        // working — only the red/yellow highlighting is turned off.
+        setDiagnosticFeature(object : LSPDiagnosticFeature() {
+            override fun isSupported(file: PsiFile): Boolean =
+                !file.name.startsWith("pb_proto_") && super.isSupported(file)
         })
     }
 

@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.4</version>
+    <version>0.2.5</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.5</b>
+        <ul>
+          <li><b>Better protobuf support.</b> Diagnostics are suppressed in generated
+              <code>pb_proto_*.php</code> files (they only produced unfixable style noise), and
+              the index size limit was raised so large generated files stay navigable.</li>
+          <li><b>Framework-ready indexing.</b> The plugin now warms up Phpactor's index once per
+              server start (offline <code>index:build</code>), so framework classes resolve
+              immediately after opening a project instead of waiting for file events.</li>
+        </ul>
         <b>0.2.4</b>
         <ul>
           <li><b>Fixed: Find Usages / "who calls this method" popup did nothing.</b> Clicking a
