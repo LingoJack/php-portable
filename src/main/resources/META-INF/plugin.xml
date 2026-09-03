@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>io.genai.php</id>
     <name>GenAI PHP Portable</name>
-    <version>0.2.3</version>
+    <version>0.2.4</version>
     <vendor url="https://genai.io.vn/" email="contact@genai.io.vn">GenAI</vendor>
 
     <description><![CDATA[
@@ -23,6 +23,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.2.4</b>
+        <ul>
+          <li><b>Fixed: Find Usages / "who calls this method" popup did nothing.</b> Clicking a
+              method declaration with Cmd+Click / Ctrl+Click never listed callers and
+              Edit ▸ Find Usages found nothing. Root cause: LSP4IJ's target-element evaluator is
+              registered with an empty language key, so the platform never consults it and a
+              reference-free PSI like ours has no way to resolve the caret target. The plugin now
+              registers its own evaluator for the PHP language, wiring the caret identifier into
+              LSP4IJ's <code>textDocument/references</code> pipeline.</li>
+        </ul>
         <b>0.2.3</b>
         <ul>
           <li><b>Fixed: no completion / wrong "Class not found" errors in symlink-based
@@ -124,6 +134,9 @@
 
         <!-- Bind .php* to our file type at startup, Community-only (see class docs). -->
         <postStartupActivity implementation="io.genai.php.lang.PhpLanguageActivation"/>
+
+        <!-- Developer diagnostics, inert without -Dphp.portable.diagnose=true (see class docs). -->
+        <postStartupActivity implementation="io.genai.php.diag.PhpDiagnosticsActivity"/>
 
         <!-- 2. Run a PHP script -->
         <configurationType
